@@ -24,9 +24,11 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 2. Add goals under Work, Sport, Reading, Study, or a custom area.
 3. Choose a measurement such as complete/incomplete, count, duration, distance, pages, or sessions.
 4. Log progress during the week.
-5. Optionally schedule sessions and export them to a calendar.
-6. Print or download a weekly plan.
-7. Review completion and carry selected goals forward.
+5. Choose a weekly, monthly, or custom-range period.
+6. Drag the goal into the hourly schedule one or more times, or create a standalone detailed event.
+7. Move, resize, edit, duplicate, or delete calendar items and export them to a calendar.
+8. Print or download a weekly plan.
+9. Review completion and carry selected goals forward.
 
 ## MVP acceptance criteria
 
@@ -40,6 +42,11 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 - No private social data is queryable until explicit sharing policies are tested.
 - A new account starts with no goals and receives a short, skippable walkthrough.
 - Users can add a custom category with their own name, colour, and icon.
+- Users can create weekly, monthly, and custom-range goals without duplicating progress.
+- Page-based reading goals clearly show pages completed and remaining.
+- Dropping one goal several times creates independent sessions that survive reload.
+- Standalone events can store notes, a web link, and a location.
+- Theme selection changes only the sidebar and main accent and survives reload.
 
 ## Measurement types
 
