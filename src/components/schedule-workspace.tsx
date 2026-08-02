@@ -8,6 +8,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import {
   CalendarDays,
   CircleUserRound,
+  Copy,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { EventModal } from "./event-modal";
+import { DuplicateWeekModal } from "./duplicate-week-modal";
 import { addDays, dateKey, rangesOverlap, startOfWeek } from "@/lib/date";
 import { defaultCategories } from "@/lib/demo-data";
 import { themeStyle, themes } from "@/lib/themes";
@@ -30,6 +32,7 @@ import {
   updateCalendarEvent,
   updateTheme,
 } from "@/lib/workspace-store";
+import { duplicateWorkspaceWeek, type WeekDuplicationRequest } from "@/lib/week-duplication";
 
 function categoryForGoal(goalId: string | null, goals: Goal[], categories: Category[]) {
   const goal = goals.find((item) => item.id === goalId);
@@ -70,7 +73,11 @@ export function ScheduleWorkspace({
   const [visibleEnd, setVisibleEnd] = useState(dateKey(addDays(startOfWeek(new Date()), 6)));
   const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [workspaceNotice, setWorkspaceNotice] = useState("");
+  const visibleWeekStart = dateKey(startOfWeek(new Date(`${visibleStart}T12:00:00`)));
 
   useEffect(() => {
     let active = true;
@@ -227,6 +234,23 @@ export function ScheduleWorkspace({
     }
   }
 
+  async function duplicateWeek(request: WeekDuplicationRequest) {
+    setDuplicateBusy(true);
+    const result = await duplicateWorkspaceWeek({ user, categories, goals, events, request });
+    setGoals((current) => [...current, ...result.goals]);
+    setEvents((current) => [...current, ...result.events]);
+    const copiedCount = result.goals.length + result.events.length;
+    setDuplicateBusy(false);
+    setDuplicateOpen(false);
+    if (result.failedCount) {
+      setStorageError(`${copiedCount} item${copiedCount === 1 ? " was" : "s were"} copied, but ${result.failedCount} could not be saved.`);
+      setWorkspaceNotice("");
+    } else {
+      setStorageError("");
+      setWorkspaceNotice(`${copiedCount} item${copiedCount === 1 ? "" : "s"} copied into this schedule.`);
+    }
+  }
+
   if (!hydrated) {
     return <div className="workspace-loading"><span className="brand-mark"><Sparkles size={19} /></span><p>Preparing your calendar…</p></div>;
   }
@@ -271,15 +295,19 @@ export function ScheduleWorkspace({
             <h1>Weekly schedule</h1>
             <p>Drag a goal into the calendar as many times as you need, or select empty time to add an event.</p>
           </div>
-          <button className="primary-button" onClick={() => {
-            const start = new Date();
-            start.setMinutes(0, 0, 0);
-            start.setHours(start.getHours() + 1);
-            setEditingEvent(newEventForRange(start, new Date(start.getTime() + 60 * 60_000)));
-          }}><Plus size={18} /> Add event</button>
+          <div className="schedule-header-actions">
+            <button className="secondary-button" onClick={() => setDuplicateOpen(true)}><Copy size={17} /> Duplicate week</button>
+            <button className="primary-button" onClick={() => {
+              const start = new Date();
+              start.setMinutes(0, 0, 0);
+              start.setHours(start.getHours() + 1);
+              setEditingEvent(newEventForRange(start, new Date(start.getTime() + 60 * 60_000)));
+            }}><Plus size={18} /> Add event</button>
+          </div>
         </header>
 
         {storageError && <div className="storage-banner" role="alert">{storageError}</div>}
+        {workspaceNotice && <div className="notice-banner" role="status">{workspaceNotice}</div>}
 
         <div className="planner-layout">
           <aside className="goal-drawer">
@@ -309,6 +337,7 @@ export function ScheduleWorkspace({
               ref={calendarRef}
               plugins={[timeGridPlugin, interactionPlugin]}
               initialView="timeGridWeek"
+              firstDay={1}
               headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridWeek,timeGridDay" }}
               buttonText={{ today: "Today", week: "Week", day: "Day" }}
               allDaySlot={false}
@@ -377,6 +406,7 @@ export function ScheduleWorkspace({
         onDelete={editingEvent.id.startsWith("new-") ? undefined : removeEvent}
         onDuplicate={editingEvent.id.startsWith("new-") ? undefined : duplicateEvent}
       />}
+      {duplicateOpen && <DuplicateWeekModal goals={goals} events={events} targetWeekStart={visibleWeekStart} busy={duplicateBusy} onClose={() => setDuplicateOpen(false)} onDuplicate={duplicateWeek} />}
     </div>
   );
 }
