@@ -9,14 +9,20 @@
 - [x] Print / Save as PDF
 - [x] `.ics` calendar export
 - [x] Production data model and owner-only RLS
+- [x] Empty new-user workspace and first-login walkthrough
+- [x] Custom categories with colour and icon selection
+- [x] Per-goal log increments and goal deletion
+- [x] Optional goal events and weekly calendar
 - [ ] Add automated interaction tests
 
 ## Phase 2 — Private accounts
 
-- Supabase project and environment configuration
-- Email/password and magic-link authentication
-- Protected routes and session refresh
-- Persist goals, progress, and scheduled sessions across devices
+- [x] Supabase client integration and environment-based account mode
+- [x] Email/password authentication and session refresh
+- [x] Protected dashboard entry
+- [x] Persist goals and progress across devices
+- [ ] Magic-link authentication
+- [ ] Persist scheduled sessions across devices
 - User timezone and week-start preferences
 - Empty, loading, offline, and service-paused states
 

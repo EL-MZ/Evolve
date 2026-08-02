@@ -38,6 +38,8 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 - Calendar export produces an `.ics` file.
 - Production tables have constraints and Row-Level Security before real accounts are enabled.
 - No private social data is queryable until explicit sharing policies are tested.
+- A new account starts with no goals and receives a short, skippable walkthrough.
+- Users can add a custom category with their own name, colour, and icon.
 
 ## Measurement types
 
