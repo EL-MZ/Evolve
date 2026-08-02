@@ -11,7 +11,7 @@ This is a living record of the technical and product choices behind Evolve. It e
 | Hosting | Vercel Hobby | Builds and serves every push from GitHub | Free for this personal, non-commercial demonstration and requires almost no server administration |
 | UI | React with custom CSS | Creates the interactive dashboard and responsive visual system | Keeps the first version distinctive without committing to a large component framework |
 | Icons | Lucide | Supplies consistent interface icons | Lightweight, accessible, and visually neutral |
-| Demo persistence | `localStorage` | Keeps progress in one browser without a backend | Makes the first deployment immediately interactive and removes credential setup as a blocker |
+| Preview persistence | Namespaced `localStorage` | Keeps each device-preview workspace separate in one browser | Makes every deployment reviewable without pretending that preview entry is a secure account |
 | Production data | Supabase Postgres | Stores accounts, goals, progress, schedules, friendships, and feed events | Relational data and Row-Level Security fit ownership and sharing better than document storage |
 | Authentication | Supabase Auth | Provides user accounts and sessions | Avoids implementing password storage, reset flows, and session security ourselves |
 | Authorization | PostgreSQL Row-Level Security | Filters each database query according to the signed-in user | Privacy remains enforced even if a future screen contains a programming mistake |
@@ -130,14 +130,14 @@ This separation supports goals such as “read 120 pages” or “run 20 km” w
 
 Rejected model: one universal `tasks` table containing goal, schedule, and completion fields. It looks simpler initially but becomes ambiguous for multi-session goals and makes history difficult to preserve.
 
-## 7. Demo mode uses browser storage
+## 7. Device-preview mode uses browser storage
 
-The initial dashboard writes sample progress to `localStorage` after the page loads.
+When the two public Supabase variables are absent, the entry screen is explicitly labelled as a device-only preview. It creates a namespaced browser workspace with no sample goals. When Supabase is configured, email/password sessions and user-owned rows replace this preview path automatically.
 
 Benefits:
 
 - The Vercel deployment works before Supabase is configured.
-- Reviewers can add and complete goals immediately.
+- Reviewers can enter a fresh workspace, create categories, and complete goals immediately.
 - No demo account or shared password is required.
 - UI iteration stays fast while the data contract is being validated.
 
@@ -148,7 +148,7 @@ Limitations:
 - It is not appropriate for private or important information.
 - It cannot support friends or shared feeds.
 
-Demo mode will remain as an explicit sample workspace after authentication is added, but signed-in users will use Postgres.
+Preview mode remains an explicit fallback, while signed-in users use PostgreSQL. New profiles receive four starter categories through the database trigger, but no goals. Custom category names, colours, and icon keys are user-owned rows protected by Row-Level Security.
 
 ## 8. Export decisions
 

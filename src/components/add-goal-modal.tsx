@@ -1,20 +1,23 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { X } from "lucide-react";
-import { categories } from "@/lib/demo-data";
+import { Plus, X } from "lucide-react";
 import type { CategoryId, Goal } from "@/lib/types";
+import type { Category } from "@/lib/types";
 
-export function AddGoalModal({ onClose, onAdd }: { onClose: () => void; onAdd: (goal: Goal) => void }) {
+export function AddGoalModal({ categories, weekStart, initialCategory, onClose, onAdd, onCreateCategory }: { categories: Category[]; weekStart: string; initialCategory?: string; onClose: () => void; onAdd: (goal: Goal) => void | Promise<void>; onCreateCategory: () => void }) {
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<CategoryId>("work");
+  const [category, setCategory] = useState<CategoryId>(initialCategory ?? categories[0]?.id ?? "");
   const [target, setTarget] = useState(1);
   const [unit, setUnit] = useState("sessions");
+  const [saving, setSaving] = useState(false);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!title.trim()) return;
-    onAdd({ id: crypto.randomUUID(), title: title.trim(), category, current: 0, target, unit, dueDay: "Sunday", completed: false });
+    if (!title.trim() || !category) return;
+    setSaving(true);
+    await onAdd({ id: crypto.randomUUID(), title: title.trim(), category, current: 0, target, unit, dueDay: "Sunday", completed: false, weekStart });
+    setSaving(false);
   }
 
   return (
@@ -34,6 +37,7 @@ export function AddGoalModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
             <select value={category} onChange={(event) => setCategory(event.target.value as CategoryId)}>
               {categories.map((item) => <option key={item.id} value={item.id}>{item.shortLabel}</option>)}
             </select>
+            <button className="create-category-link" type="button" onClick={onCreateCategory}><Plus size={14} /> Create a new category</button>
           </label>
           <div className="form-row">
             <label>
@@ -45,7 +49,7 @@ export function AddGoalModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               <input value={unit} onChange={(event) => setUnit(event.target.value)} />
             </label>
           </div>
-          <button className="primary-button modal-submit" type="submit">Add to my week</button>
+          <button className="primary-button modal-submit" disabled={saving || !categories.length} type="submit">{saving ? "Adding…" : "Add to my week"}</button>
         </form>
       </div>
     </div>

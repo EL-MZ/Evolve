@@ -1,94 +1,181 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   Bell,
-  BookOpen,
-  BriefcaseBusiness,
   CalendarDays,
   Check,
   ChevronDown,
   CircleUserRound,
   Download,
-  Dumbbell,
   Flame,
-  GraduationCap,
   LayoutDashboard,
+  LogOut,
   Menu,
   Plus,
   Printer,
+  RotateCcw,
   Sparkles,
   Target,
   X,
 } from "lucide-react";
+import { AddCategoryModal } from "./add-category-modal";
 import { AddGoalModal } from "./add-goal-modal";
 import { ProgressRing } from "./progress-ring";
-import { categories, initialGoals } from "@/lib/demo-data";
+import { Walkthrough } from "./walkthrough";
+import { iconByName } from "@/lib/category-icons";
+import { defaultCategories } from "@/lib/demo-data";
 import { addWeeks, formatWeek, startOfWeek } from "@/lib/date";
 import { downloadWeekCalendar } from "@/lib/exports";
-import type { Goal } from "@/lib/types";
+import { createCategory, createGoal, loadWorkspace, updateGoalProgress } from "@/lib/workspace-store";
+import type { Category, Goal, WorkspaceUser } from "@/lib/types";
 
-const iconByCategory = {
-  work: BriefcaseBusiness,
-  sport: Dumbbell,
-  reading: BookOpen,
-  study: GraduationCap,
-};
+type StoredWorkspace = { categories: Category[]; goals: Goal[] };
 
-const STORAGE_KEY = "evolve-demo-goals";
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-export function Dashboard() {
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut: () => Promise<void> }) {
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [initialCategory, setInitialCategory] = useState<string>();
+  const [returnToGoal, setReturnToGoal] = useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try { setGoals(JSON.parse(stored) as Goal[]); } catch { /* Keep the safe demo data. */ }
-      }
-      setHydrated(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (hydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
-  }, [goals, hydrated]);
+  const [storageError, setStorageError] = useState("");
 
   const weekStart = addWeeks(startOfWeek(new Date()), weekOffset);
-  const completed = goals.filter((goal) => goal.completed).length;
-  const overall = goals.length ? Math.round(goals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / goals.length * 100) : 0;
-  const focusGoals = goals.filter((goal) => !goal.completed).slice(0, 3);
+  const weekKey = dateKey(weekStart);
+  const visibleGoals = goals.filter((goal) => goal.weekStart === weekKey);
+  const workspaceKey = `evolve-workspace-v2:${user.id}`;
+  const tourKey = `evolve-tour-seen:${user.id}`;
 
-  const activity = useMemo(() => [35, 62, 48, 76, overall, 54, 20], [overall]);
+  useEffect(() => {
+    let active = true;
 
-  function updateGoal(id: string, updater: (goal: Goal) => Goal) {
-    setGoals((current) => current.map((goal) => goal.id === id ? updater(goal) : goal));
+    async function hydrate() {
+      if (user.mode === "supabase") {
+        try {
+          const workspace = await loadWorkspace(user.id);
+          if (!active) return;
+          setCategories(workspace.categories.length ? workspace.categories : defaultCategories);
+          setGoals(workspace.goals);
+        } catch {
+          if (!active) return;
+          setStorageError("Your account is connected, but the workspace tables are not ready yet. Apply the latest Supabase migrations.");
+          setCategories(defaultCategories);
+          setGoals([]);
+        }
+      } else {
+        const stored = window.localStorage.getItem(workspaceKey);
+        if (stored) {
+          try {
+            const workspace = JSON.parse(stored) as StoredWorkspace;
+            setCategories(workspace.categories?.length ? workspace.categories : defaultCategories);
+            setGoals(workspace.goals ?? []);
+          } catch { window.localStorage.removeItem(workspaceKey); }
+        }
+      }
+      if (!window.localStorage.getItem(tourKey)) setWalkthroughOpen(true);
+      if (active) setHydrated(true);
+    }
+
+    const timer = window.setTimeout(() => void hydrate(), 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [tourKey, user.id, user.mode, workspaceKey]);
+
+  useEffect(() => {
+    if (hydrated && user.mode === "preview") {
+      window.localStorage.setItem(workspaceKey, JSON.stringify({ categories, goals } satisfies StoredWorkspace));
+    }
+  }, [categories, goals, hydrated, user.mode, workspaceKey]);
+
+  const completed = visibleGoals.filter((goal) => goal.completed).length;
+  const overall = visibleGoals.length ? Math.round(visibleGoals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / visibleGoals.length * 100) : 0;
+  const focusGoals = visibleGoals.filter((goal) => !goal.completed).slice(0, 3);
+  const strongestArea = (() => {
+    let best: { label: string; score: number } | null = null;
+    for (const category of categories) {
+      const items = visibleGoals.filter((goal) => goal.category === category.id);
+      if (!items.length) continue;
+      const score = items.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / items.length;
+      if (!best || score > best.score) best = { label: category.shortLabel, score };
+    }
+    return best?.label ?? "Fresh start";
+  })();
+  const activity = visibleGoals.length ? [18, 32, 24, 42, overall, Math.round(overall / 2), 12] : [0, 0, 0, 0, 0, 0, 0];
+
+  function finishWalkthrough(createFirstGoal: boolean) {
+    window.localStorage.setItem(tourKey, "true");
+    setWalkthroughOpen(false);
+    if (createFirstGoal) setGoalModalOpen(true);
+  }
+
+  function openGoal(categoryId?: string) {
+    setInitialCategory(categoryId);
+    setGoalModalOpen(true);
+  }
+
+  async function changeGoal(goal: Goal, next: Goal) {
+    setGoals((current) => current.map((item) => item.id === goal.id ? next : item));
+    if (user.mode === "supabase") {
+      try { await updateGoalProgress(user.id, next); }
+      catch {
+        setGoals((current) => current.map((item) => item.id === goal.id ? goal : item));
+        setStorageError("That progress update could not be saved. Please try again.");
+      }
+    }
   }
 
   function toggleGoal(goal: Goal) {
-    updateGoal(goal.id, (current) => ({ ...current, completed: !current.completed, current: !current.completed ? current.target : 0 }));
+    const completed = !goal.completed;
+    void changeGoal(goal, { ...goal, completed, current: completed ? goal.target : 0 });
   }
 
   function incrementGoal(goal: Goal) {
     const step = goal.target >= 10 ? Math.max(1, Math.round(goal.target / 10)) : 1;
-    updateGoal(goal.id, (current) => {
-      const next = Math.min(current.target, current.current + step);
-      return { ...current, current: next, completed: next >= current.target };
-    });
+    const nextValue = Math.min(goal.target, goal.current + step);
+    void changeGoal(goal, { ...goal, current: nextValue, completed: nextValue >= goal.target });
   }
 
-  function addGoal(goal: Goal) {
-    setGoals((current) => [...current, goal]);
-    setModalOpen(false);
+  async function addGoal(goal: Goal) {
+    const category = categories.find((item) => item.id === goal.category);
+    if (!category) return;
+    try {
+      const saved = user.mode === "supabase" ? await createGoal(user.id, goal, category) : goal;
+      setGoals((current) => [...current, saved]);
+      setGoalModalOpen(false);
+      setStorageError("");
+    } catch { setStorageError("Your goal could not be saved. Please try again."); }
   }
+
+  async function addCategory(category: Category) {
+    try {
+      const saved = user.mode === "supabase" ? await createCategory(user.id, category) : category;
+      setCategories((current) => [...current, saved]);
+      setCategoryModalOpen(false);
+      setStorageError("");
+      if (returnToGoal) {
+        setInitialCategory(saved.id);
+        setGoalModalOpen(true);
+        setReturnToGoal(false);
+      }
+    } catch { setStorageError("Your category could not be saved. Please try again."); }
+  }
+
+  if (!hydrated) return <div className="workspace-loading"><span className="brand-mark"><Sparkles size={19} /></span><p>Preparing your week…</p></div>;
 
   return (
     <div className="app-shell">
@@ -103,9 +190,15 @@ export function Dashboard() {
         <div className="sidebar-spacer" />
         <div className="streak-card">
           <span className="streak-icon"><Flame size={20} /></span>
-          <div><strong>6 week streak</strong><span>Keep showing up.</span></div>
+          <div><strong>{visibleGoals.length ? "Momentum started" : "A fresh start"}</strong><span>{visibleGoals.length ? "Keep showing up." : "Your first step counts."}</span></div>
         </div>
-        <button className="profile-button"><CircleUserRound size={26} /><span><strong>Mehdi</strong><small>Demo workspace</small></span><ChevronDown size={16} /></button>
+        <div className="profile-wrap">
+          <button className="profile-button" onClick={() => setProfileOpen((value) => !value)}><CircleUserRound size={26} /><span><strong>{user.displayName}</strong><small>{user.mode === "supabase" ? "Private workspace" : "Device preview"}</small></span><ChevronDown size={16} /></button>
+          {profileOpen && <div className="profile-menu">
+            <button onClick={() => { setWalkthroughOpen(true); setProfileOpen(false); }}><RotateCcw size={15} /> Replay walkthrough</button>
+            <button onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>
+          </div>}
+        </div>
       </aside>
 
       <main className="main-content" id="overview">
@@ -122,102 +215,96 @@ export function Dashboard() {
           <div className="top-actions">
             <div className="export-wrap">
               <button className="secondary-button" onClick={() => setExportOpen((value) => !value)}><Download size={17} /> Export <ChevronDown size={15} /></button>
-              {exportOpen && (
-                <div className="export-menu">
-                  <button onClick={() => { window.print(); setExportOpen(false); }}><Printer size={17} /><span><strong>Print or save PDF</strong><small>Clean weekly plan</small></span></button>
-                  <button onClick={() => { downloadWeekCalendar(goals, weekStart); setExportOpen(false); }}><CalendarDays size={17} /><span><strong>Calendar file</strong><small>Works with Google Calendar</small></span></button>
-                </div>
-              )}
+              {exportOpen && <div className="export-menu">
+                <button onClick={() => { window.print(); setExportOpen(false); }}><Printer size={17} /><span><strong>Print or save PDF</strong><small>Clean weekly plan</small></span></button>
+                <button onClick={() => { downloadWeekCalendar(visibleGoals, weekStart); setExportOpen(false); }}><CalendarDays size={17} /><span><strong>Calendar file</strong><small>Works with Google Calendar</small></span></button>
+              </div>}
             </div>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={19} /><span /></button>
-            <button className="primary-button" onClick={() => setModalOpen(true)}><Plus size={18} /> Add goal</button>
+            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={19} /></button>
+            <button className="primary-button" onClick={() => openGoal()}><Plus size={18} /> Add goal</button>
           </div>
         </header>
 
+        {storageError && <div className="storage-banner" role="alert">{storageError}</div>}
+
         <section className="hero-grid">
           <div className="hero-copy">
-            <p className="eyebrow">Your weekly momentum</p>
-            <h1>Make this week<br /><em>count.</em></h1>
-            <p>Focus on the few things that move your work, body and mind forward.</p>
+            <p className="eyebrow">{visibleGoals.length ? "Your weekly momentum" : `Welcome, ${user.displayName}`}</p>
+            <h1>{visibleGoals.length ? <>Make this week<br /><em>count.</em></> : <>What will move<br />you <em>forward?</em></>}</h1>
+            <p>{visibleGoals.length ? "Focus on the few things that move your work, body and mind forward." : "Your workspace is ready and completely clear. Add one meaningful goal to begin."}</p>
+            {!visibleGoals.length && <button className="primary-button empty-cta" onClick={() => openGoal()}><Plus size={18} /> Add my first goal</button>}
           </div>
           <div className="hero-progress">
             <ProgressRing value={overall} />
-            <div className="hero-stat"><span>Goals completed</span><strong>{completed}<small> / {goals.length}</small></strong></div>
-            <div className="hero-stat"><span>Strongest area</span><strong className="lime-text">Reading</strong></div>
+            <div className="hero-stat"><span>Goals completed</span><strong>{completed}<small> / {visibleGoals.length}</small></strong></div>
+            <div className="hero-stat"><span>Strongest area</span><strong className="lime-text">{strongestArea}</strong></div>
           </div>
         </section>
 
         <section className="content-grid">
           <div className="goal-area" id="goals">
             <div className="section-heading">
-              <div><p className="eyebrow">Four pillars</p><h2>Your goals</h2></div>
-              <span>{goals.length} active this week</span>
+              <div><p className="eyebrow">Your areas</p><h2>Your goals</h2></div>
+              <div className="section-actions"><span>{visibleGoals.length} active this week</span><button className="secondary-button" onClick={() => setCategoryModalOpen(true)}><Plus size={16} /> New category</button></div>
             </div>
             <div className="goal-grid">
               {categories.map((category) => {
-                const CategoryIcon = iconByCategory[category.id];
-                const categoryGoals = goals.filter((goal) => goal.category === category.id);
+                const CategoryIcon = iconByName[category.icon] ?? iconByName.heart;
+                const categoryGoals = visibleGoals.filter((goal) => goal.category === category.id);
                 const percent = categoryGoals.length ? Math.round(categoryGoals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / categoryGoals.length * 100) : 0;
-                return (
-                  <article className="goal-card" key={category.id} style={{ "--category": category.color } as React.CSSProperties}>
-                    <div className="goal-card-header">
-                      <span className="category-icon"><CategoryIcon size={19} /></span>
-                      <div><span>{category.shortLabel}</span><strong>{category.label}</strong></div>
-                      <span className="category-percent">{percent}%</span>
-                    </div>
-                    <div className="category-bar"><span style={{ width: `${percent}%` }} /></div>
-                    <div className="goal-list">
-                      {categoryGoals.map((goal) => {
-                        const progress = Math.round(Math.min(goal.current / goal.target, 1) * 100);
-                        return (
-                          <div className={`goal-row ${goal.completed ? "goal-done" : ""}`} key={goal.id}>
-                            <button className="check-button" onClick={() => toggleGoal(goal)} aria-label={`${goal.completed ? "Reopen" : "Complete"} ${goal.title}`}>{goal.completed && <Check size={15} />}</button>
-                            <div className="goal-main">
-                              <strong>{goal.title}</strong>
-                              <div className="mini-progress"><span style={{ width: `${progress}%` }} /></div>
-                              <small>{goal.current} of {goal.target} {goal.unit} · by {goal.dueDay}</small>
-                            </div>
-                            {!goal.completed && <button className="log-button" onClick={() => incrementGoal(goal)}>+ log</button>}
-                          </div>
-                        );
-                      })}
-                      {!categoryGoals.length && <p className="empty-category">No goal here yet.</p>}
-                    </div>
-                    <button className="add-inline" onClick={() => setModalOpen(true)}><Plus size={16} /> Add {category.shortLabel.toLowerCase()} goal</button>
-                  </article>
-                );
+                return <article className="goal-card" key={category.id} style={{ "--category": category.color } as React.CSSProperties}>
+                  <div className="goal-card-header">
+                    <span className="category-icon"><CategoryIcon size={19} /></span>
+                    <div><span>{category.shortLabel}</span><strong>{category.label}</strong></div>
+                    <span className="category-percent">{percent}%</span>
+                  </div>
+                  <div className="category-bar"><span style={{ width: `${percent}%` }} /></div>
+                  <div className="goal-list">
+                    {categoryGoals.map((goal) => {
+                      const progress = Math.round(Math.min(goal.current / goal.target, 1) * 100);
+                      return <div className={`goal-row ${goal.completed ? "goal-done" : ""}`} key={goal.id}>
+                        <button className="check-button" onClick={() => toggleGoal(goal)} aria-label={`${goal.completed ? "Reopen" : "Complete"} ${goal.title}`}>{goal.completed && <Check size={15} />}</button>
+                        <div className="goal-main"><strong>{goal.title}</strong><div className="mini-progress"><span style={{ width: `${progress}%` }} /></div><small>{goal.current} of {goal.target} {goal.unit} · by {goal.dueDay}</small></div>
+                        {!goal.completed && <button className="log-button" onClick={() => incrementGoal(goal)}>+ log</button>}
+                      </div>;
+                    })}
+                    {!categoryGoals.length && <p className="empty-category">No goal here yet.</p>}
+                  </div>
+                  <button className="add-inline" onClick={() => openGoal(category.id)}><Plus size={16} /> Add {category.shortLabel.toLowerCase()} goal</button>
+                </article>;
               })}
+              <button className="new-category-card" onClick={() => setCategoryModalOpen(true)}><span><Plus size={22} /></span><strong>Add your own category</strong><small>Choose a name, colour and icon</small></button>
             </div>
           </div>
 
           <aside className="right-rail" id="schedule">
             <section className="rail-card focus-card">
-              <div className="rail-heading"><div><p className="eyebrow">Right now</p><h3>Today’s focus</h3></div><span className="today-badge">3 items</span></div>
+              <div className="rail-heading"><div><p className="eyebrow">Right now</p><h3>Today’s focus</h3></div><span className="today-badge">{focusGoals.length} items</span></div>
               <div className="focus-list">
                 {focusGoals.map((goal, index) => {
-                  const category = categories.find((item) => item.id === goal.category)!;
-                  return <button className="focus-item" key={goal.id} onClick={() => incrementGoal(goal)}><span className="focus-number">0{index + 1}</span><span><strong>{goal.title}</strong><small><i style={{ background: category.color }} />{category.shortLabel} · log progress</small></span><ArrowRight size={16} /></button>;
+                  const category = categories.find((item) => item.id === goal.category);
+                  return <button className="focus-item" key={goal.id} onClick={() => incrementGoal(goal)}><span className="focus-number">0{index + 1}</span><span><strong>{goal.title}</strong><small><i style={{ background: category?.color }} />{category?.shortLabel} · log progress</small></span><ArrowRight size={16} /></button>;
                 })}
+                {!focusGoals.length && <div className="empty-focus"><Target size={22} /><p>Your first goal will appear here.</p></div>}
               </div>
             </section>
 
             <section className="rail-card rhythm-card">
               <div className="rail-heading"><div><p className="eyebrow">Consistency</p><h3>Weekly rhythm</h3></div><Flame className="coral-text" size={21} /></div>
               <div className="activity-bars" aria-label="Activity by day">
-                {activity.map((value, index) => <div key={index}><span style={{ height: `${Math.max(value, 12)}%` }} className={index === 4 ? "today-bar" : ""} /><small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small></div>)}
+                {activity.map((value, index) => <div key={index}><span style={{ height: `${Math.max(value, 5)}%` }} className={index === 4 ? "today-bar" : ""} /><small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small></div>)}
               </div>
-              <p><strong>Nice pace.</strong> You logged progress on 4 days this week.</p>
+              <p>{visibleGoals.length ? <><strong>Nice pace.</strong> Every small update builds your weekly rhythm.</> : <><strong>Ready when you are.</strong> Your rhythm will grow as you log progress.</>}</p>
             </section>
 
-            <section className="quote-card">
-              <Sparkles size={20} />
-              <blockquote>“Small steps, repeated, become a different life.”</blockquote>
-              <span>Weekly reminder</span>
-            </section>
+            <section className="quote-card"><Sparkles size={20} /><blockquote>“Small steps, repeated, become a different life.”</blockquote><span>Weekly reminder</span></section>
           </aside>
         </section>
       </main>
-      {modalOpen && <AddGoalModal onClose={() => setModalOpen(false)} onAdd={addGoal} />}
+
+      {goalModalOpen && <AddGoalModal categories={categories} weekStart={weekKey} initialCategory={initialCategory} onClose={() => setGoalModalOpen(false)} onAdd={addGoal} onCreateCategory={() => { setGoalModalOpen(false); setReturnToGoal(true); setCategoryModalOpen(true); }} />}
+      {categoryModalOpen && <AddCategoryModal onClose={() => { setCategoryModalOpen(false); setReturnToGoal(false); }} onAdd={addCategory} />}
+      {walkthroughOpen && <Walkthrough onFinish={finishWalkthrough} />}
     </div>
   );
 }
