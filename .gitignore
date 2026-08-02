@@ -8,4 +8,3 @@ out/
 npm-debug.log*
 *.tsbuildinfo
 .DS_Store
-

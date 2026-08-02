@@ -16,4 +16,3 @@ export function ProgressRing({ value }: { value: number }) {
     </div>
   );
 }
-

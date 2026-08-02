@@ -28,4 +28,3 @@ export function formatWeek(date: Date) {
   }).format(end);
   return `${startText} – ${endText}`;
 }
-

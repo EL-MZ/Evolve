@@ -21,4 +21,3 @@
 ## Demo mode
 
 Until Supabase authentication is connected, the dashboard uses local browser storage. Keep demo mode usable without environment variables so every Vercel deployment remains reviewable.
-

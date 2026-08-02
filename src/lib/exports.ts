@@ -29,4 +29,3 @@ export function downloadWeekCalendar(goals: Goal[], weekStart: Date) {
   link.click();
   URL.revokeObjectURL(url);
 }
-
