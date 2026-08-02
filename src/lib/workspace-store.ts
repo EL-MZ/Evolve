@@ -1,5 +1,14 @@
 import { getSupabaseClient } from "./supabase";
-import type { CalendarEvent, Category, CategoryIcon, Goal } from "./types";
+import type {
+  CalendarEvent,
+  Category,
+  CategoryIcon,
+  Goal,
+  GoalMeasurement,
+  GoalPeriodType,
+  ThemeKey,
+  Workspace,
+} from "./types";
 
 type CategoryRow = {
   id: string;
@@ -17,19 +26,28 @@ type GoalRow = {
   current_value: number | string;
   target_value: number | string;
   log_increment: number | string;
+  measurement: GoalMeasurement;
   unit: string;
-  due_day: string;
+  notes: string | null;
+  period_type: GoalPeriodType;
+  period_start: string;
+  period_end: string;
+  due_date: string;
   status: string;
-  week_start: string;
 };
 
 type ScheduledSessionRow = {
   id: string;
-  goal_id: string;
+  goal_id: string | null;
+  event_kind: "goal_session" | "event";
   title: string;
   starts_at: string;
   ends_at: string;
   timezone: string;
+  notes: string | null;
+  link_url: string | null;
+  location: string | null;
+  color: string;
 };
 
 function client() {
@@ -38,17 +56,28 @@ function client() {
   return value;
 }
 
-export async function loadWorkspace(ownerId: string) {
+export async function loadWorkspace(ownerId: string): Promise<Workspace> {
   const api = client();
   const [
+    { data: profileRow, error: profileError },
     { data: categoryRows, error: categoryError },
     { data: goalRows, error: goalError },
     { data: sessionRows, error: sessionError },
   ] = await Promise.all([
+    api.from("profiles").select("theme_key").eq("id", ownerId).single(),
     api.from("categories").select("id,name,short_label,color,icon_key,is_default").eq("owner_id", ownerId).order("sort_order"),
-    api.from("goals").select("id,title,category_id,current_value,target_value,log_increment,unit,due_day,status,week_start").eq("owner_id", ownerId).order("sort_order"),
-    api.from("scheduled_sessions").select("id,goal_id,title,starts_at,ends_at,timezone").eq("owner_id", ownerId).order("starts_at"),
+    api
+      .from("goals")
+      .select("id,title,category_id,current_value,target_value,log_increment,measurement,unit,notes,period_type,period_start,period_end,due_date,status")
+      .eq("owner_id", ownerId)
+      .order("period_start"),
+    api
+      .from("scheduled_sessions")
+      .select("id,goal_id,event_kind,title,starts_at,ends_at,timezone,notes,link_url,location,color")
+      .eq("owner_id", ownerId)
+      .order("starts_at"),
   ]);
+  if (profileError) throw profileError;
   if (categoryError) throw categoryError;
   if (goalError) throw goalError;
   if (sessionError) throw sessionError;
@@ -68,20 +97,34 @@ export async function loadWorkspace(ownerId: string) {
     current: Number(row.current_value),
     target: Number(row.target_value),
     increment: Number(row.log_increment),
+    measurement: row.measurement,
     unit: row.unit,
-    dueDay: row.due_day,
+    notes: row.notes ?? "",
+    periodType: row.period_type,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    dueDate: row.due_date,
     completed: row.status === "completed",
-    weekStart: row.week_start,
   }));
   const events: CalendarEvent[] = ((sessionRows ?? []) as ScheduledSessionRow[]).map((row) => ({
     id: row.id,
     goalId: row.goal_id,
+    kind: row.event_kind,
     title: row.title,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     timezone: row.timezone,
+    notes: row.notes ?? "",
+    linkUrl: row.link_url ?? "",
+    location: row.location ?? "",
+    color: row.color,
   }));
-  return { categories, goals, events };
+  return {
+    categories,
+    goals,
+    events,
+    themeKey: (profileRow?.theme_key as ThemeKey | undefined) ?? "lime",
+  };
 }
 
 export async function createCategory(ownerId: string, category: Category) {
@@ -101,15 +144,21 @@ export async function createGoal(ownerId: string, goal: Goal, category: Category
   const { data, error } = await client().from("goals").insert({
     owner_id: ownerId,
     title: goal.title,
+    notes: goal.notes || null,
     category_id: goal.category,
     category_name: category.shortLabel,
     category_color: category.color,
     current_value: goal.current,
     target_value: goal.target,
     log_increment: goal.increment,
+    measurement: goal.measurement,
     unit: goal.unit,
-    due_day: goal.dueDay,
-    week_start: goal.weekStart,
+    week_start: goal.periodStart,
+    period_type: goal.periodType,
+    period_start: goal.periodStart,
+    period_end: goal.periodEnd,
+    due_date: goal.dueDate,
+    due_day: new Date(`${goal.dueDate}T12:00:00`).toLocaleDateString("en-NZ", { weekday: "long" }),
     status: goal.completed ? "completed" : "active",
   }).select("id").single();
   if (error) throw error;
@@ -120,13 +169,41 @@ export async function createCalendarEvent(ownerId: string, event: CalendarEvent)
   const { data, error } = await client().from("scheduled_sessions").insert({
     owner_id: ownerId,
     goal_id: event.goalId,
+    event_kind: event.kind,
     title: event.title,
     starts_at: event.startsAt,
     ends_at: event.endsAt,
     timezone: event.timezone,
+    notes: event.notes || null,
+    link_url: event.linkUrl || null,
+    location: event.location || null,
+    color: event.color,
   }).select("id").single();
   if (error) throw error;
   return { ...event, id: data.id as string };
+}
+
+export async function updateCalendarEvent(ownerId: string, event: CalendarEvent) {
+  const { error } = await client().from("scheduled_sessions").update({
+    goal_id: event.goalId,
+    event_kind: event.kind,
+    title: event.title,
+    starts_at: event.startsAt,
+    ends_at: event.endsAt,
+    timezone: event.timezone,
+    notes: event.notes || null,
+    link_url: event.linkUrl || null,
+    location: event.location || null,
+    color: event.color,
+    updated_at: new Date().toISOString(),
+  }).eq("id", event.id).eq("owner_id", ownerId);
+  if (error) throw error;
+  return event;
+}
+
+export async function deleteCalendarEvent(ownerId: string, eventId: string) {
+  const { error } = await client().from("scheduled_sessions").delete().eq("id", eventId).eq("owner_id", ownerId);
+  if (error) throw error;
 }
 
 export async function deleteGoal(ownerId: string, goalId: string) {
@@ -142,3 +219,12 @@ export async function updateGoalProgress(_ownerId: string, goal: Goal) {
   });
   if (error) throw error;
 }
+
+export async function updateTheme(ownerId: string, themeKey: ThemeKey) {
+  const { error } = await client().from("profiles").update({
+    theme_key: themeKey,
+    updated_at: new Date().toISOString(),
+  }).eq("id", ownerId);
+  if (error) throw error;
+}
+
