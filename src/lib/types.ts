@@ -1,5 +1,18 @@
 export type CategoryId = string;
 
+export type GoalPeriodType = "weekly" | "monthly" | "custom";
+
+export type GoalMeasurement =
+  | "binary"
+  | "count"
+  | "duration"
+  | "distance"
+  | "pages"
+  | "sessions"
+  | "custom";
+
+export type ThemeKey = "lime" | "ocean" | "coral" | "violet";
+
 export type CategoryIcon =
   | "briefcase"
   | "dumbbell"
@@ -21,19 +34,28 @@ export type Goal = {
   current: number;
   target: number;
   increment: number;
+  measurement: GoalMeasurement;
   unit: string;
-  dueDay: string;
+  notes: string;
+  periodType: GoalPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  dueDate: string;
   completed: boolean;
-  weekStart: string;
 };
 
 export type CalendarEvent = {
   id: string;
-  goalId: string;
+  goalId: string | null;
+  kind: "goal_session" | "event";
   title: string;
   startsAt: string;
   endsAt: string;
   timezone: string;
+  notes: string;
+  linkUrl: string;
+  location: string;
+  color: string;
 };
 
 export type Category = {
@@ -50,4 +72,11 @@ export type WorkspaceUser = {
   email: string;
   displayName: string;
   mode: "supabase" | "preview";
+};
+
+export type Workspace = {
+  categories: Category[];
+  goals: Goal[];
+  events: CalendarEvent[];
+  themeKey: ThemeKey;
 };
