@@ -16,7 +16,9 @@ export function downloadWeekCalendar(calendarEvents: CalendarEvent[]) {
       `DTSTART:${calendarTimestamp(event.startsAt)}`,
       `DTEND:${calendarTimestamp(event.endsAt)}`,
       `SUMMARY:${escapeCalendar(event.title)}`,
-      `DESCRIPTION:${escapeCalendar("Scheduled with Evolve")}`,
+      `DESCRIPTION:${escapeCalendar([event.notes, event.linkUrl, "Scheduled with Evolve"].filter(Boolean).join("\n\n"))}`,
+      ...(event.location ? [`LOCATION:${escapeCalendar(event.location)}`] : []),
+      ...(event.linkUrl ? [`URL:${escapeCalendar(event.linkUrl)}`] : []),
       "END:VEVENT",
     ].join("\r\n");
   });

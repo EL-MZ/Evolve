@@ -13,6 +13,11 @@
 - [x] Custom categories with colour and icon selection
 - [x] Per-goal log increments and goal deletion
 - [x] Optional goal events and weekly calendar
+- [x] Weekly, monthly, and custom-range goal periods
+- [x] Page-based reading tracking
+- [x] Hourly week/day schedule with repeated draggable goal sessions
+- [x] Detailed standalone events with full create/update/delete support
+- [x] Persisted sidebar/accent themes
 - [ ] Add automated interaction tests
 
 ## Phase 2 — Private accounts
@@ -22,13 +27,13 @@
 - [x] Protected dashboard entry
 - [x] Persist goals and progress across devices
 - [ ] Magic-link authentication
-- [ ] Persist scheduled sessions across devices
-- User timezone and week-start preferences
+- [x] Persist scheduled sessions across devices
+- [ ] User timezone and week-start preferences
 - Empty, loading, offline, and service-paused states
 
 ## Phase 3 — Planning and richer exports
 
-- Calendar-style scheduled sessions
+- [x] Calendar-style scheduled sessions
 - Goal recurrence and carry-forward review
 - DOCX export
 - Branded direct PDF export

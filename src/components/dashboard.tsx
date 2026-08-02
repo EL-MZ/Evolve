@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Palette,
   Plus,
   Printer,
   RotateCcw,
@@ -29,24 +30,18 @@ import { ProgressRing } from "./progress-ring";
 import { Walkthrough } from "./walkthrough";
 import { iconByName } from "@/lib/category-icons";
 import { defaultCategories } from "@/lib/demo-data";
-import { addWeeks, formatWeek, startOfWeek } from "@/lib/date";
+import { addDays, addWeeks, dateKey, formatWeek, rangesOverlap, startOfWeek } from "@/lib/date";
 import { downloadWeekCalendar } from "@/lib/exports";
-import { createCalendarEvent, createCategory, createGoal, deleteGoal as deleteGoalRecord, loadWorkspace, updateGoalProgress } from "@/lib/workspace-store";
-import type { CalendarEvent, Category, Goal, WorkspaceUser } from "@/lib/types";
-
-type StoredWorkspace = { categories: Category[]; goals: Goal[]; events?: CalendarEvent[] };
-
-function dateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { themeStyle, themes } from "@/lib/themes";
+import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/workspace-local";
+import { createCalendarEvent, createCategory, createGoal, deleteGoal as deleteGoalRecord, loadWorkspace, updateGoalProgress, updateTheme } from "@/lib/workspace-store";
+import type { CalendarEvent, Category, Goal, ThemeKey, Workspace, WorkspaceUser } from "@/lib/types";
 
 export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut: () => Promise<void> }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
+  const [themeKey, setThemeKey] = useState<ThemeKey>("lime");
   const [weekOffset, setWeekOffset] = useState(0);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -61,8 +56,8 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
   const weekStart = addWeeks(startOfWeek(new Date()), weekOffset);
   const weekKey = dateKey(weekStart);
-  const visibleGoals = goals.filter((goal) => goal.weekStart === weekKey);
-  const workspaceKey = `evolve-workspace-v2:${user.id}`;
+  const weekEndKey = dateKey(addDays(weekStart, 6));
+  const visibleGoals = goals.filter((goal) => rangesOverlap(goal.periodStart, goal.periodEnd, weekKey, weekEndKey));
   const tourKey = `evolve-tour-seen:${user.id}`;
 
   useEffect(() => {
@@ -76,6 +71,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
           setCategories(workspace.categories.length ? workspace.categories : defaultCategories);
           setGoals(workspace.goals);
           setEvents(workspace.events);
+          setThemeKey(workspace.themeKey);
         } catch {
           if (!active) return;
           setStorageError("Your account is connected, but the workspace tables are not ready yet. Apply the latest Supabase migrations.");
@@ -83,15 +79,11 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
           setGoals([]);
         }
       } else {
-        const stored = window.localStorage.getItem(workspaceKey);
-        if (stored) {
-          try {
-            const workspace = JSON.parse(stored) as StoredWorkspace;
-            setCategories(workspace.categories?.length ? workspace.categories : defaultCategories);
-            setGoals((workspace.goals ?? []).map((goal) => ({ ...goal, increment: goal.increment > 0 ? goal.increment : 1 })));
-            setEvents(workspace.events ?? []);
-          } catch { window.localStorage.removeItem(workspaceKey); }
-        }
+        const workspace = loadLocalWorkspace(user.id, { categories: defaultCategories, goals: [], events: [], themeKey: "lime" });
+        setCategories(workspace.categories);
+        setGoals(workspace.goals);
+        setEvents(workspace.events);
+        setThemeKey(workspace.themeKey);
       }
       if (!window.localStorage.getItem(tourKey)) setWalkthroughOpen(true);
       if (active) setHydrated(true);
@@ -99,13 +91,13 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
     const timer = window.setTimeout(() => void hydrate(), 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [tourKey, user.id, user.mode, workspaceKey]);
+  }, [tourKey, user.id, user.mode]);
 
   useEffect(() => {
     if (hydrated && user.mode === "preview") {
-      window.localStorage.setItem(workspaceKey, JSON.stringify({ categories, goals, events } satisfies StoredWorkspace));
+      saveLocalWorkspace(user.id, { categories, goals, events, themeKey } satisfies Workspace);
     }
-  }, [categories, events, goals, hydrated, user.mode, workspaceKey]);
+  }, [categories, events, goals, hydrated, themeKey, user.id, user.mode]);
 
   const completed = visibleGoals.filter((goal) => goal.completed).length;
   const overall = visibleGoals.length ? Math.round(visibleGoals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / visibleGoals.length * 100) : 0;
@@ -209,19 +201,47 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
     } catch { setStorageError("Your category could not be saved. Please try again."); }
   }
 
+  async function selectTheme(next: ThemeKey) {
+    const previous = themeKey;
+    setThemeKey(next);
+    if (user.mode === "supabase") {
+      try {
+        await updateTheme(user.id, next);
+        setStorageError("");
+      } catch {
+        setThemeKey(previous);
+        setStorageError("That theme could not be saved. Please try again.");
+      }
+    }
+  }
+
   if (!hydrated) return <div className="workspace-loading"><span className="brand-mark"><Sparkles size={19} /></span><p>Preparing your week…</p></div>;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={themeStyle(themeKey)}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand"><span className="brand-mark"><Sparkles size={19} /></span><span>evolve</span></div>
         <button className="sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X /></button>
         <nav aria-label="Main navigation">
           <a className="nav-link active" href="#overview"><LayoutDashboard size={19} /> My week</a>
           <a className="nav-link" href="#goals"><Target size={19} /> Goals</a>
-          <a className="nav-link" href="#schedule"><CalendarDays size={19} /> Schedule</a>
+          <a className="nav-link" href="/schedule"><CalendarDays size={19} /> Schedule</a>
         </nav>
         <div className="sidebar-spacer" />
+        <div className="theme-picker">
+          <span><Palette size={14} /> Theme</span>
+          <div>
+            {themes.map((theme) => <button
+              aria-label={theme.label}
+              aria-pressed={theme.key === themeKey}
+              className={theme.key === themeKey ? "selected" : ""}
+              key={theme.key}
+              onClick={() => void selectTheme(theme.key)}
+              style={{ background: theme.accent }}
+              title={theme.label}
+            />)}
+          </div>
+        </div>
         <div className="streak-card">
           <span className="streak-icon"><Flame size={20} /></span>
           <div><strong>{visibleGoals.length ? "Momentum started" : "A fresh start"}</strong><span>{visibleGoals.length ? "Keep showing up." : "Your first step counts."}</span></div>
@@ -298,7 +318,15 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
                       const progress = Math.round(Math.min(goal.current / goal.target, 1) * 100);
                       return <div className={`goal-row ${goal.completed ? "goal-done" : ""}`} key={goal.id}>
                         <button className="check-button" onClick={() => toggleGoal(goal)} aria-label={`${goal.completed ? "Reopen" : "Complete"} ${goal.title}`}>{goal.completed && <Check size={15} />}</button>
-                        <div className="goal-main"><strong>{goal.title}</strong><div className="mini-progress"><span style={{ width: `${progress}%` }} /></div><small>{goal.current} of {goal.target} {goal.unit} · by {goal.dueDay}</small></div>
+                        <div className="goal-main">
+                          <strong>{goal.title}</strong>
+                          <div className="goal-badges">
+                            <span>{goal.periodType === "weekly" ? "Weekly" : goal.periodType === "monthly" ? "Monthly" : "Multi-week"}</span>
+                            {goal.measurement === "pages" && <span>Reading</span>}
+                          </div>
+                          <div className="mini-progress"><span style={{ width: `${progress}%` }} /></div>
+                          <small>{goal.current} of {goal.target} {goal.unit} · due {new Date(`${goal.dueDate}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</small>
+                        </div>
                         <div className="goal-actions">
                           {!goal.completed && <button className="log-button" onClick={() => incrementGoal(goal)}>+{goal.increment} log</button>}
                           <button className="delete-goal-button" onClick={() => void removeGoal(goal)} aria-label={`Delete ${goal.title}`}><Trash2 size={13} /></button>
@@ -316,7 +344,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
           <aside className="right-rail" id="schedule">
             <section className="rail-card calendar-card">
-              <div className="rail-heading"><div><p className="eyebrow">Plan the week</p><h3>Calendar</h3></div><CalendarDays size={21} /></div>
+              <div className="rail-heading"><div><p className="eyebrow">Plan the week</p><h3>Calendar</h3></div><a className="calendar-open-link" href="/schedule" aria-label="Open full schedule"><CalendarDays size={21} /></a></div>
               <div className="calendar-week" aria-label="Weekly calendar">
                 {weekDates.map((date) => {
                   const key = dateKey(date);
@@ -339,7 +367,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
                     <span className="event-copy"><strong>{event.title}</strong><small><Clock3 size={12} /> {start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}–{end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></span>
                   </div>;
                 })}
-                {!visibleEvents.length && <div className="empty-calendar"><CalendarDays size={22} /><p>Choose “Add to weekly calendar” when creating a goal.</p></div>}
+                {!visibleEvents.length && <div className="empty-calendar"><CalendarDays size={22} /><p>Drag goals into the full schedule or add an event.</p><a href="/schedule">Open schedule</a></div>}
               </div>
             </section>
 

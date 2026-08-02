@@ -14,7 +14,7 @@ Open `http://localhost:3000`. Without Supabase variables, the app clearly runs a
 ## Enable real accounts
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_initial_schema.sql`, then `0002_accounts_and_custom_categories.sql`, in order.
+2. Run every SQL file in `supabase/migrations` in numeric order. Existing projects should apply the new `0004_planning_periods_and_event_details.sql` migration.
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 4. Add the same two variables in Vercel and redeploy.
 5. In Supabase Auth URL configuration, set the production site URL to the Vercel domain and add the local URL as a redirect URL.
@@ -42,7 +42,11 @@ Configure hosted environment values in Vercel rather than committing them. The d
 - First-login walkthrough that can be replayed from the profile menu
 - Supabase email/password authentication with a device-only fallback preview
 - Goal creation, deletion, completion, and user-selected progress increments
-- Optional scheduled goal events in a weekly calendar
+- Weekly, monthly, and custom-range goals
+- Reading and page-count tracking
+- Full hourly week/day schedule with repeated draggable goal sessions
+- Standalone events with notes, links, location, move, resize, duplicate, and delete actions
+- Four sidebar/accent themes persisted per user
 - Browser persistence for instant demonstration
 - Week navigation
 - Printable A4 layout / Save as PDF
