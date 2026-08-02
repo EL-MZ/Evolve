@@ -41,7 +41,8 @@ Configure hosted environment values in Vercel rather than committing them. The d
 - Unlimited custom categories with a colour and selectable icon
 - First-login walkthrough that can be replayed from the profile menu
 - Supabase email/password authentication with a device-only fallback preview
-- Goal creation, completion, and incremental progress logging
+- Goal creation, deletion, completion, and user-selected progress increments
+- Optional scheduled goal events in a weekly calendar
 - Browser persistence for instant demonstration
 - Week navigation
 - Printable A4 layout / Save as PDF

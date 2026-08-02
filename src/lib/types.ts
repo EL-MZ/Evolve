@@ -20,10 +20,20 @@ export type Goal = {
   category: CategoryId;
   current: number;
   target: number;
+  increment: number;
   unit: string;
   dueDay: string;
   completed: boolean;
   weekStart: string;
+};
+
+export type CalendarEvent = {
+  id: string;
+  goalId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
 };
 
 export type Category = {

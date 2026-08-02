@@ -11,6 +11,8 @@
 - [x] Production data model and owner-only RLS
 - [x] Empty new-user workspace and first-login walkthrough
 - [x] Custom categories with colour and icon selection
+- [x] Per-goal log increments and goal deletion
+- [x] Optional goal events and weekly calendar
 - [ ] Add automated interaction tests
 
 ## Phase 2 — Private accounts

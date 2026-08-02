@@ -16,6 +16,8 @@ The executable migrations are in `supabase/migrations` and must be applied in nu
 
 - `week_start` is a date representing Monday in the user's planning timezone.
 - `target_value` is positive. `current_value` is the fast current summary, while `progress_entries` retain the history of cumulative values.
+- `log_increment` is the positive amount added by one Log action and is chosen per goal.
+- Calendar events remain in `scheduled_sessions`; deleting their parent goal removes them through the foreign-key cascade.
 - The `set_goal_progress` function updates the goal summary and its history entry in one transaction.
 - Four starter categories are inserted for each profile, but a new account has no goals.
 - Custom category names, colours, and icon keys are stored as user-owned rows rather than being hard-coded in the interface.

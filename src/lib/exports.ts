@@ -1,21 +1,22 @@
-import type { Goal } from "./types";
+import type { CalendarEvent } from "./types";
 
 function escapeCalendar(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
 
-export function downloadWeekCalendar(goals: Goal[], weekStart: Date) {
-  const events = goals.map((goal, index) => {
-    const date = new Date(weekStart);
-    date.setDate(date.getDate() + Math.min(index, 6));
-    const stamp = date.toISOString().slice(0, 10).replace(/-/g, "");
+function calendarTimestamp(value: string) {
+  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+export function downloadWeekCalendar(calendarEvents: CalendarEvent[]) {
+  const events = calendarEvents.map((event) => {
     return [
       "BEGIN:VEVENT",
-      `UID:${goal.id}-${stamp}@evolve`,
-      `DTSTART;VALUE=DATE:${stamp}`,
-      `DTEND;VALUE=DATE:${stamp}`,
-      `SUMMARY:${escapeCalendar(goal.title)}`,
-      `DESCRIPTION:${escapeCalendar(`Weekly target: ${goal.target} ${goal.unit}`)}`,
+      `UID:${event.id}@evolve`,
+      `DTSTART:${calendarTimestamp(event.startsAt)}`,
+      `DTEND:${calendarTimestamp(event.endsAt)}`,
+      `SUMMARY:${escapeCalendar(event.title)}`,
+      `DESCRIPTION:${escapeCalendar("Scheduled with Evolve")}`,
       "END:VEVENT",
     ].join("\r\n");
   });

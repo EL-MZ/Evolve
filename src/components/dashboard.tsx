@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   CircleUserRound,
+  Clock3,
   Download,
   Flame,
   LayoutDashboard,
@@ -19,6 +20,7 @@ import {
   RotateCcw,
   Sparkles,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
 import { AddCategoryModal } from "./add-category-modal";
@@ -29,10 +31,10 @@ import { iconByName } from "@/lib/category-icons";
 import { defaultCategories } from "@/lib/demo-data";
 import { addWeeks, formatWeek, startOfWeek } from "@/lib/date";
 import { downloadWeekCalendar } from "@/lib/exports";
-import { createCategory, createGoal, loadWorkspace, updateGoalProgress } from "@/lib/workspace-store";
-import type { Category, Goal, WorkspaceUser } from "@/lib/types";
+import { createCalendarEvent, createCategory, createGoal, deleteGoal as deleteGoalRecord, loadWorkspace, updateGoalProgress } from "@/lib/workspace-store";
+import type { CalendarEvent, Category, Goal, WorkspaceUser } from "@/lib/types";
 
-type StoredWorkspace = { categories: Category[]; goals: Goal[] };
+type StoredWorkspace = { categories: Category[]; goals: Goal[]; events?: CalendarEvent[] };
 
 function dateKey(date: Date) {
   const year = date.getFullYear();
@@ -43,6 +45,7 @@ function dateKey(date: Date) {
 
 export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut: () => Promise<void> }) {
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [weekOffset, setWeekOffset] = useState(0);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
@@ -72,6 +75,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
           if (!active) return;
           setCategories(workspace.categories.length ? workspace.categories : defaultCategories);
           setGoals(workspace.goals);
+          setEvents(workspace.events);
         } catch {
           if (!active) return;
           setStorageError("Your account is connected, but the workspace tables are not ready yet. Apply the latest Supabase migrations.");
@@ -84,7 +88,8 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
           try {
             const workspace = JSON.parse(stored) as StoredWorkspace;
             setCategories(workspace.categories?.length ? workspace.categories : defaultCategories);
-            setGoals(workspace.goals ?? []);
+            setGoals((workspace.goals ?? []).map((goal) => ({ ...goal, increment: goal.increment > 0 ? goal.increment : 1 })));
+            setEvents(workspace.events ?? []);
           } catch { window.localStorage.removeItem(workspaceKey); }
         }
       }
@@ -98,13 +103,21 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
   useEffect(() => {
     if (hydrated && user.mode === "preview") {
-      window.localStorage.setItem(workspaceKey, JSON.stringify({ categories, goals } satisfies StoredWorkspace));
+      window.localStorage.setItem(workspaceKey, JSON.stringify({ categories, goals, events } satisfies StoredWorkspace));
     }
-  }, [categories, goals, hydrated, user.mode, workspaceKey]);
+  }, [categories, events, goals, hydrated, user.mode, workspaceKey]);
 
   const completed = visibleGoals.filter((goal) => goal.completed).length;
   const overall = visibleGoals.length ? Math.round(visibleGoals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / visibleGoals.length * 100) : 0;
   const focusGoals = visibleGoals.filter((goal) => !goal.completed).slice(0, 3);
+  const weekDates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + index);
+    return date;
+  });
+  const visibleEvents = events
+    .filter((event) => weekDates.some((date) => dateKey(date) === dateKey(new Date(event.startsAt))))
+    .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
   const strongestArea = (() => {
     let best: { label: string; score: number } | null = null;
     for (const category of categories) {
@@ -145,20 +158,41 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
   }
 
   function incrementGoal(goal: Goal) {
-    const step = goal.target >= 10 ? Math.max(1, Math.round(goal.target / 10)) : 1;
-    const nextValue = Math.min(goal.target, goal.current + step);
+    const nextValue = Math.min(goal.target, goal.current + goal.increment);
     void changeGoal(goal, { ...goal, current: nextValue, completed: nextValue >= goal.target });
   }
 
-  async function addGoal(goal: Goal) {
+  async function addGoal(goal: Goal, calendarEvent?: CalendarEvent) {
     const category = categories.find((item) => item.id === goal.category);
     if (!category) return;
+    let savedGoal: Goal | undefined;
     try {
-      const saved = user.mode === "supabase" ? await createGoal(user.id, goal, category) : goal;
-      setGoals((current) => [...current, saved]);
+      savedGoal = user.mode === "supabase" ? await createGoal(user.id, goal, category) : goal;
+      let savedEvent: CalendarEvent | undefined;
+      if (calendarEvent) {
+        const linkedEvent = { ...calendarEvent, goalId: savedGoal.id };
+        savedEvent = user.mode === "supabase" ? await createCalendarEvent(user.id, linkedEvent) : linkedEvent;
+      }
+      setGoals((current) => [...current, savedGoal!]);
+      if (savedEvent) setEvents((current) => [...current, savedEvent]);
       setGoalModalOpen(false);
       setStorageError("");
-    } catch { setStorageError("Your goal could not be saved. Please try again."); }
+    } catch {
+      if (savedGoal && user.mode === "supabase") {
+        try { await deleteGoalRecord(user.id, savedGoal.id); } catch { /* The next reload will reconcile server state. */ }
+      }
+      setStorageError("Your goal or calendar event could not be saved. Please try again.");
+    }
+  }
+
+  async function removeGoal(goal: Goal) {
+    if (!window.confirm(`Delete “${goal.title}” and its calendar events? This cannot be undone.`)) return;
+    try {
+      if (user.mode === "supabase") await deleteGoalRecord(user.id, goal.id);
+      setGoals((current) => current.filter((item) => item.id !== goal.id));
+      setEvents((current) => current.filter((event) => event.goalId !== goal.id));
+      setStorageError("");
+    } catch { setStorageError("That goal could not be deleted. Please try again."); }
   }
 
   async function addCategory(category: Category) {
@@ -217,7 +251,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
               <button className="secondary-button" onClick={() => setExportOpen((value) => !value)}><Download size={17} /> Export <ChevronDown size={15} /></button>
               {exportOpen && <div className="export-menu">
                 <button onClick={() => { window.print(); setExportOpen(false); }}><Printer size={17} /><span><strong>Print or save PDF</strong><small>Clean weekly plan</small></span></button>
-                <button onClick={() => { downloadWeekCalendar(visibleGoals, weekStart); setExportOpen(false); }}><CalendarDays size={17} /><span><strong>Calendar file</strong><small>Works with Google Calendar</small></span></button>
+                <button disabled={!visibleEvents.length} onClick={() => { downloadWeekCalendar(visibleEvents); setExportOpen(false); }}><CalendarDays size={17} /><span><strong>Calendar file</strong><small>{visibleEvents.length ? "Export scheduled events" : "Schedule a goal first"}</small></span></button>
               </div>}
             </div>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={19} /></button>
@@ -265,7 +299,10 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
                       return <div className={`goal-row ${goal.completed ? "goal-done" : ""}`} key={goal.id}>
                         <button className="check-button" onClick={() => toggleGoal(goal)} aria-label={`${goal.completed ? "Reopen" : "Complete"} ${goal.title}`}>{goal.completed && <Check size={15} />}</button>
                         <div className="goal-main"><strong>{goal.title}</strong><div className="mini-progress"><span style={{ width: `${progress}%` }} /></div><small>{goal.current} of {goal.target} {goal.unit} · by {goal.dueDay}</small></div>
-                        {!goal.completed && <button className="log-button" onClick={() => incrementGoal(goal)}>+ log</button>}
+                        <div className="goal-actions">
+                          {!goal.completed && <button className="log-button" onClick={() => incrementGoal(goal)}>+{goal.increment} log</button>}
+                          <button className="delete-goal-button" onClick={() => void removeGoal(goal)} aria-label={`Delete ${goal.title}`}><Trash2 size={13} /></button>
+                        </div>
                       </div>;
                     })}
                     {!categoryGoals.length && <p className="empty-category">No goal here yet.</p>}
@@ -278,6 +315,34 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
           </div>
 
           <aside className="right-rail" id="schedule">
+            <section className="rail-card calendar-card">
+              <div className="rail-heading"><div><p className="eyebrow">Plan the week</p><h3>Calendar</h3></div><CalendarDays size={21} /></div>
+              <div className="calendar-week" aria-label="Weekly calendar">
+                {weekDates.map((date) => {
+                  const key = dateKey(date);
+                  const count = visibleEvents.filter((event) => dateKey(new Date(event.startsAt)) === key).length;
+                  return <div className={key === dateKey(new Date()) ? "calendar-day today" : "calendar-day"} key={key}>
+                    <small>{date.toLocaleDateString(undefined, { weekday: "narrow" })}</small>
+                    <strong>{date.getDate()}</strong>
+                    {count > 0 && <span>{count}</span>}
+                  </div>;
+                })}
+              </div>
+              <div className="calendar-agenda">
+                {visibleEvents.map((event) => {
+                  const start = new Date(event.startsAt);
+                  const end = new Date(event.endsAt);
+                  const goal = goals.find((item) => item.id === event.goalId);
+                  const category = categories.find((item) => item.id === goal?.category);
+                  return <div className="calendar-event" key={event.id} style={{ "--event-color": category?.color ?? "#a8f06a" } as React.CSSProperties}>
+                    <span className="event-date"><strong>{start.toLocaleDateString(undefined, { weekday: "short" })}</strong><small>{start.getDate()}</small></span>
+                    <span className="event-copy"><strong>{event.title}</strong><small><Clock3 size={12} /> {start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}–{end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></span>
+                  </div>;
+                })}
+                {!visibleEvents.length && <div className="empty-calendar"><CalendarDays size={22} /><p>Choose “Add to weekly calendar” when creating a goal.</p></div>}
+              </div>
+            </section>
+
             <section className="rail-card focus-card">
               <div className="rail-heading"><div><p className="eyebrow">Right now</p><h3>Today’s focus</h3></div><span className="today-badge">{focusGoals.length} items</span></div>
               <div className="focus-list">
