@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  Bell,
   CalendarDays,
   Check,
   ChevronDown,
   CircleUserRound,
   Clock3,
+  Copy,
   Download,
   Flame,
   LayoutDashboard,
@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { AddCategoryModal } from "./add-category-modal";
 import { AddGoalModal } from "./add-goal-modal";
-import { ProgressRing } from "./progress-ring";
+import { DuplicateWeekModal } from "./duplicate-week-modal";
 import { Walkthrough } from "./walkthrough";
 import { iconByName } from "@/lib/category-icons";
 import { defaultCategories } from "@/lib/demo-data";
@@ -35,6 +35,7 @@ import { downloadWeekCalendar } from "@/lib/exports";
 import { themeStyle, themes } from "@/lib/themes";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/workspace-local";
 import { createCalendarEvent, createCategory, createGoal, deleteGoal as deleteGoalRecord, loadWorkspace, updateGoalProgress, updateTheme } from "@/lib/workspace-store";
+import { duplicateWorkspaceWeek, type WeekDuplicationRequest } from "@/lib/week-duplication";
 import type { CalendarEvent, Category, Goal, ThemeKey, Workspace, WorkspaceUser } from "@/lib/types";
 
 export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut: () => Promise<void> }) {
@@ -51,8 +52,11 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
   const [exportOpen, setExportOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [workspaceNotice, setWorkspaceNotice] = useState("");
 
   const weekStart = addWeeks(startOfWeek(new Date()), weekOffset);
   const weekKey = dateKey(weekStart);
@@ -99,7 +103,6 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
     }
   }, [categories, events, goals, hydrated, themeKey, user.id, user.mode]);
 
-  const completed = visibleGoals.filter((goal) => goal.completed).length;
   const overall = visibleGoals.length ? Math.round(visibleGoals.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / visibleGoals.length * 100) : 0;
   const focusGoals = visibleGoals.filter((goal) => !goal.completed).slice(0, 3);
   const weekDates = Array.from({ length: 7 }, (_, index) => {
@@ -110,16 +113,11 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
   const visibleEvents = events
     .filter((event) => weekDates.some((date) => dateKey(date) === dateKey(new Date(event.startsAt))))
     .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
-  const strongestArea = (() => {
-    let best: { label: string; score: number } | null = null;
-    for (const category of categories) {
-      const items = visibleGoals.filter((goal) => goal.category === category.id);
-      if (!items.length) continue;
-      const score = items.reduce((sum, goal) => sum + Math.min(goal.current / goal.target, 1), 0) / items.length;
-      if (!best || score > best.score) best = { label: category.shortLabel, score };
-    }
-    return best?.label ?? "Fresh start";
-  })();
+  const today = new Date();
+  const todayEvents = events
+    .filter((event) => dateKey(new Date(event.startsAt)) === dateKey(today))
+    .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
+  const featuredTodayEvents = todayEvents.slice(0, 3);
   const activity = visibleGoals.length ? [18, 32, 24, 42, overall, Math.round(overall / 2), 12] : [0, 0, 0, 0, 0, 0, 0];
 
   function finishWalkthrough(createFirstGoal: boolean) {
@@ -215,6 +213,23 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
     }
   }
 
+  async function duplicateWeek(request: WeekDuplicationRequest) {
+    setDuplicateBusy(true);
+    const result = await duplicateWorkspaceWeek({ user, categories, goals, events, request });
+    setGoals((current) => [...current, ...result.goals]);
+    setEvents((current) => [...current, ...result.events]);
+    const copiedCount = result.goals.length + result.events.length;
+    setDuplicateBusy(false);
+    setDuplicateOpen(false);
+    if (result.failedCount) {
+      setStorageError(`${copiedCount} item${copiedCount === 1 ? " was" : "s were"} copied, but ${result.failedCount} could not be saved.`);
+      setWorkspaceNotice("");
+    } else {
+      setStorageError("");
+      setWorkspaceNotice(`${copiedCount} item${copiedCount === 1 ? "" : "s"} copied into ${formatWeek(new Date(`${request.targetWeekStart}T12:00:00`))}.`);
+    }
+  }
+
   if (!hydrated) return <div className="workspace-loading"><span className="brand-mark"><Sparkles size={19} /></span><p>Preparing your week…</p></div>;
 
   return (
@@ -257,16 +272,20 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
       <main className="main-content" id="overview">
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu /></button>
-          <div className="week-control">
-            <button className="icon-button" onClick={() => setWeekOffset((value) => value - 1)} aria-label="Previous week"><ArrowLeft size={18} /></button>
-            <button className="week-label" onClick={() => setWeekOffset(0)}>
-              <span>{weekOffset === 0 ? "This week" : weekOffset > 0 ? `In ${weekOffset} week${weekOffset === 1 ? "" : "s"}` : `${Math.abs(weekOffset)} week${weekOffset === -1 ? "" : "s"} ago`}</span>
-              <strong>{formatWeek(weekStart)}</strong>
-            </button>
-            <button className="icon-button" onClick={() => setWeekOffset((value) => value + 1)} aria-label="Next week"><ArrowRight size={18} /></button>
+          <div className="topbar-left">
+            <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu /></button>
+            <div className="topbar-greeting"><span>Welcome, {user.displayName}</span><strong>{visibleGoals.length ? "Make this week count." : "What will move you forward?"}</strong></div>
+            <div className="week-control">
+              <button className="icon-button" onClick={() => setWeekOffset((value) => value - 1)} aria-label="Previous week"><ArrowLeft size={18} /></button>
+              <button className="week-label" onClick={() => setWeekOffset(0)}>
+                <span>{weekOffset === 0 ? "This week" : weekOffset > 0 ? `In ${weekOffset} week${weekOffset === 1 ? "" : "s"}` : `${Math.abs(weekOffset)} week${weekOffset === -1 ? "" : "s"} ago`}</span>
+                <strong>{formatWeek(weekStart)}</strong>
+              </button>
+              <button className="icon-button" onClick={() => setWeekOffset((value) => value + 1)} aria-label="Next week"><ArrowRight size={18} /></button>
+            </div>
           </div>
           <div className="top-actions">
+            <button className="secondary-button" onClick={() => setDuplicateOpen(true)}><Copy size={17} /> Duplicate</button>
             <div className="export-wrap">
               <button className="secondary-button" onClick={() => setExportOpen((value) => !value)}><Download size={17} /> Export <ChevronDown size={15} /></button>
               {exportOpen && <div className="export-menu">
@@ -274,24 +293,35 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
                 <button disabled={!visibleEvents.length} onClick={() => { downloadWeekCalendar(visibleEvents); setExportOpen(false); }}><CalendarDays size={17} /><span><strong>Calendar file</strong><small>{visibleEvents.length ? "Export scheduled events" : "Schedule a goal first"}</small></span></button>
               </div>}
             </div>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={19} /></button>
             <button className="primary-button" onClick={() => openGoal()}><Plus size={18} /> Add goal</button>
           </div>
         </header>
 
         {storageError && <div className="storage-banner" role="alert">{storageError}</div>}
+        {workspaceNotice && <div className="notice-banner" role="status">{workspaceNotice}</div>}
 
-        <section className="hero-grid">
-          <div className="hero-copy">
-            <p className="eyebrow">{visibleGoals.length ? "Your weekly momentum" : `Welcome, ${user.displayName}`}</p>
-            <h1>{visibleGoals.length ? <>Make this week<br /><em>count.</em></> : <>What will move<br />you <em>forward?</em></>}</h1>
-            <p>{visibleGoals.length ? "Focus on the few things that move your work, body and mind forward." : "Your workspace is ready and completely clear. Add one meaningful goal to begin."}</p>
-            {!visibleGoals.length && <button className="primary-button empty-cta" onClick={() => openGoal()}><Plus size={18} /> Add my first goal</button>}
-          </div>
-          <div className="hero-progress">
-            <ProgressRing value={overall} />
-            <div className="hero-stat"><span>Goals completed</span><strong>{completed}<small> / {visibleGoals.length}</small></strong></div>
-            <div className="hero-stat"><span>Strongest area</span><strong className="lime-text">{strongestArea}</strong></div>
+        <section className="today-overview">
+          <header className="today-overview-heading">
+            <div><p className="eyebrow">Today’s calendar</p><h1>{today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h1></div>
+            <div><span>{visibleGoals.length ? `${overall}% weekly progress` : "A clear week to shape"}</span><a className="secondary-button" href="/schedule"><CalendarDays size={17} /> Open schedule</a></div>
+          </header>
+          <div className="today-event-grid">
+            {featuredTodayEvents.map((event) => {
+              const start = new Date(event.startsAt);
+              const end = new Date(event.endsAt);
+              const goal = goals.find((item) => item.id === event.goalId);
+              const category = categories.find((item) => item.id === goal?.category);
+              return <a className="today-event-card" href="/schedule" key={event.id} style={{ "--event-color": category?.color ?? event.color } as React.CSSProperties}>
+                <span className="today-event-time">{start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                <span><strong>{event.title}</strong><small><Clock3 size={12} /> Until {end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{event.location ? ` · ${event.location}` : ""}</small></span>
+                <ArrowRight size={18} />
+              </a>;
+            })}
+            {!featuredTodayEvents.length && <div className="today-empty">
+              <span><CalendarDays size={24} /></span>
+              <div><strong>Your day is open.</strong><small>Add an event or drag a goal into today’s schedule.</small></div>
+              <a className="primary-button" href="/schedule"><Plus size={17} /> Plan today</a>
+            </div>}
           </div>
         </section>
 
@@ -397,6 +427,7 @@ export function Dashboard({ user, onSignOut }: { user: WorkspaceUser; onSignOut:
 
       {goalModalOpen && <AddGoalModal categories={categories} weekStart={weekKey} initialCategory={initialCategory} onClose={() => setGoalModalOpen(false)} onAdd={addGoal} onCreateCategory={() => { setGoalModalOpen(false); setReturnToGoal(true); setCategoryModalOpen(true); }} />}
       {categoryModalOpen && <AddCategoryModal onClose={() => { setCategoryModalOpen(false); setReturnToGoal(false); }} onAdd={addCategory} />}
+      {duplicateOpen && <DuplicateWeekModal goals={goals} events={events} targetWeekStart={weekKey} busy={duplicateBusy} onClose={() => setDuplicateOpen(false)} onDuplicate={duplicateWeek} />}
       {walkthroughOpen && <Walkthrough onFinish={finishWalkthrough} />}
     </div>
   );

@@ -28,7 +28,7 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 6. Drag the goal into the hourly schedule one or more times, or create a standalone detailed event.
 7. Move, resize, edit, duplicate, or delete calendar items and export them to a calendar.
 8. Print or download a weekly plan.
-9. Review completion and carry selected goals forward.
+9. Review completion and carry selected goals, schedule items, or the full plan forward from an earlier week.
 
 ## MVP acceptance criteria
 
@@ -47,6 +47,9 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 - Dropping one goal several times creates independent sessions that survive reload.
 - Standalone events can store notes, a web link, and a location.
 - Theme selection changes only the sidebar and main accent and survives reload.
+- A compact dashboard panel shows at most three of today’s calendar items, with the full schedule one action away.
+- Users can duplicate selected or all goals and schedule items from an earlier week into the week they are viewing.
+- Duplicated goals restart with zero progress, while duplicated schedule items retain their time, notes, link, location, and colour shifted into the destination week.
 
 ## Measurement types
 

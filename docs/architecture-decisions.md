@@ -137,6 +137,10 @@ Goals use a period contract rather than being copied into weeks:
 
 Each weekly dashboard selects overlapping goals, so progress remains shared across every week in a longer period.
 
+Weekly duplication is an explicit, additive action over these separate records. The user chooses a source week, a destination week, and any combination of goals and scheduled items. A copied goal receives a new identity, shifts its whole period and due date by the week offset, and restarts with zero progress. A copied schedule item receives a new identity, keeps its duration and details, and shifts by the same calendar-day offset. When its linked goal is copied in the same action, the new session links to the new goal; otherwise it keeps its existing goal link. Existing destination records are never overwritten.
+
+This behavior is implemented through the existing goal and scheduled-session writes, so it needs no additional database table or migration. The trade-off is that a multi-record Supabase copy is best-effort rather than one database transaction; the interface reports any partial failure and preserves every successfully created record.
+
 Rejected model: one universal `tasks` table containing goal, schedule, and completion fields. It looks simpler initially but becomes ambiguous for multi-session goals and makes history difficult to preserve.
 
 ## 7. Device-preview mode uses browser storage
