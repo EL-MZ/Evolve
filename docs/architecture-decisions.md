@@ -16,6 +16,7 @@ This is a living record of the technical and product choices behind Evolve. It e
 | Authentication | Supabase Auth | Provides user accounts and sessions | Avoids implementing password storage, reset flows, and session security ourselves |
 | Authorization | PostgreSQL Row-Level Security | Filters each database query according to the signed-in user | Privacy remains enforced even if a future screen contains a programming mistake |
 | Calendar v1 | `.ics` download | Exports selected goals as a standard calendar file | Works with Google, Apple, and Outlook without OAuth or secret management |
+| Planning calendar | FullCalendar Standard | Provides hourly week/day views, external goal dragging, selection, moving, and resizing | The required TimeGrid and interaction features are MIT-licensed and work without Premium Scheduler |
 | Calendar v2 | Google Calendar API | Creates and updates calendar events directly | Useful later, but OAuth consent and token lifecycle are unnecessary for the first demo |
 | PDF v1 | Browser print CSS | Produces a clean printout or Save-as-PDF result | No server or PDF dependency; works immediately |
 | DOCX/PDF v2 | Shared export view-model with `docx` and React PDF | Generates consistent downloadable documents | Staged until the weekly plan content and layout are stable |
@@ -123,10 +124,18 @@ Rules for future social work:
 These are deliberately different records:
 
 - A **goal** says what outcome is wanted and how it is measured.
-- A **scheduled session** reserves time and can become a calendar event.
+- A **scheduled session** reserves time. It can link to a goal or stand alone as a detailed event.
 - A **progress entry** records what actually happened.
 
-This separation supports goals such as “read 120 pages” or “run 20 km” without pretending each goal is one event. It also makes calendar rescheduling independent from evidence of progress.
+This separation supports goals such as “read 120 pages” or “run 20 km” without pretending each goal is one event. The same goal can be dragged into the schedule repeatedly, producing independent sessions. It also makes calendar rescheduling independent from evidence of progress.
+
+Goals use a period contract rather than being copied into weeks:
+
+- weekly goals cover Monday through Sunday;
+- monthly goals cover a calendar month;
+- custom goals cover an inclusive user-selected date range.
+
+Each weekly dashboard selects overlapping goals, so progress remains shared across every week in a longer period.
 
 Rejected model: one universal `tasks` table containing goal, schedule, and completion fields. It looks simpler initially but becomes ambiguous for multi-session goals and makes history difficult to preserve.
 
@@ -160,7 +169,7 @@ Later, a server or browser PDF renderer can provide identical typography across 
 
 ### Calendar
 
-The first version downloads RFC-style `.ics` events. It requires no Google consent screen and works across calendar vendors.
+The planning interface uses FullCalendar Standard's TimeGrid and interaction modules for hourly week/day views, repeated external dragging, selection, moving, and resizing. Calendar records remain in Evolve and the export path downloads RFC-style `.ics` events. This requires no Google consent screen and works across calendar vendors.
 
 Direct Google Calendar synchronization is deliberately later because it introduces:
 
@@ -175,7 +184,7 @@ DOCX generation will use the TypeScript `docx` package and the same normalized `
 
 ## 9. Visual system
 
-The design uses a warm off-white canvas, dark evergreen navigation, and energetic lime, coral, cyan, and violet accents. Space Grotesk carries motivating headlines; Manrope keeps dense interface text readable.
+The design uses a warm off-white canvas with four user-selectable sidebar/accent themes: Evolve Lime, Ocean Blue, Sunset Coral, and Violet Focus. Category colours and content surfaces remain stable so a theme change does not alter goal meaning.
 
 Why this direction:
 
