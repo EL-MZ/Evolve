@@ -8,6 +8,7 @@ export type GoalMeasurement =
   | "duration"
   | "distance"
   | "pages"
+  | "minutes"
   | "sessions"
   | "custom";
 
@@ -41,6 +42,7 @@ export type Goal = {
   periodStart: string;
   periodEnd: string;
   dueDate: string;
+  repeatUntilDue: boolean;
   completed: boolean;
 };
 
@@ -56,6 +58,9 @@ export type CalendarEvent = {
   linkUrl: string;
   location: string;
   color: string;
+  completed: boolean;
+  completedAt: string | null;
+  progressContribution: number;
 };
 
 export type Category = {

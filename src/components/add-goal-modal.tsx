@@ -14,7 +14,8 @@ import type {
 
 const trackingOptions: Array<{ value: GoalMeasurement; label: string; unit: string; target: number; increment: number }> = [
   { value: "sessions", label: "Sessions", unit: "sessions", target: 3, increment: 1 },
-  { value: "pages", label: "Pages", unit: "pages", target: 100, increment: 10 },
+  { value: "pages", label: "Book pages", unit: "pages", target: 200, increment: 10 },
+  { value: "minutes", label: "Audiobook minutes", unit: "minutes", target: 600, increment: 15 },
   { value: "duration", label: "Hours", unit: "hours", target: 5, increment: 0.5 },
   { value: "count", label: "Tasks or count", unit: "tasks", target: 5, increment: 1 },
   { value: "distance", label: "Distance", unit: "km", target: 10, increment: 1 },
@@ -56,6 +57,7 @@ export function AddGoalModal({
   const [periodStart, setPeriodStart] = useState(weekStart);
   const [periodEnd, setPeriodEnd] = useState(weeklyEnd);
   const [dueDate, setDueDate] = useState(weeklyEnd);
+  const [repeatUntilDue, setRepeatUntilDue] = useState(false);
   const [scheduled, setScheduled] = useState(false);
   const [eventDate, setEventDate] = useState(weekStart);
   const [eventTime, setEventTime] = useState("09:00");
@@ -69,6 +71,7 @@ export function AddGoalModal({
 
   function changePeriod(next: GoalPeriodType) {
     setPeriodType(next);
+    setRepeatUntilDue(false);
     if (next === "weekly") {
       setPeriodStart(weekStart);
       setPeriodEnd(weeklyEnd);
@@ -83,6 +86,23 @@ export function AddGoalModal({
     }
   }
 
+  function changeRepeatUntilDue(enabled: boolean) {
+    setRepeatUntilDue(enabled);
+    setPeriodType("weekly");
+    setPeriodStart(weekStart);
+    if (enabled) {
+      setPeriodEnd(dueDate);
+    } else {
+      setPeriodEnd(weeklyEnd);
+      if (dueDate > weeklyEnd) setDueDate(weeklyEnd);
+    }
+  }
+
+  function changeDueDate(next: string) {
+    setDueDate(next);
+    if (repeatUntilDue) setPeriodEnd(next);
+  }
+
   function changeMeasurement(next: GoalMeasurement) {
     const preset = trackingOptions.find((item) => item.value === next) ?? trackingOptions[0];
     setMeasurement(next);
@@ -93,7 +113,7 @@ export function AddGoalModal({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!title.trim() || !category || target <= 0 || increment <= 0 || periodEnd < periodStart) return;
+    if (!title.trim() || !category || target <= 0 || increment <= 0 || periodEnd < periodStart || dueDate < periodStart || dueDate > periodEnd) return;
     setSaving(true);
     const goalId = crypto.randomUUID();
     let calendarEvent: CalendarEvent | undefined;
@@ -112,6 +132,9 @@ export function AddGoalModal({
         linkUrl: "",
         location: "",
         color: selectedCategory?.color ?? "#A8F06A",
+        completed: false,
+        completedAt: null,
+        progressContribution: 0,
       };
     }
     try {
@@ -129,6 +152,7 @@ export function AddGoalModal({
         periodStart,
         periodEnd,
         dueDate,
+        repeatUntilDue,
         completed: false,
       }, calendarEvent);
     } finally {
@@ -187,12 +211,17 @@ export function AddGoalModal({
               <option value="custom">Custom date range</option>
             </select>
           </label>
+          {periodType === "weekly" && <label className="schedule-toggle">
+            <input type="checkbox" checked={repeatUntilDue} onChange={(event) => changeRepeatUntilDue(event.target.checked)} />
+            <span><strong>Show this goal every week until its due date</strong><small>Progress stays shared while the goal remains visible in each week.</small></span>
+          </label>}
           {periodType === "custom" && <div className="form-row">
             <label>
               Starts
               <input type="date" value={periodStart} onChange={(event) => {
                 setPeriodStart(event.target.value);
                 if (event.target.value > periodEnd) setPeriodEnd(event.target.value);
+                if (event.target.value > dueDate) setDueDate(event.target.value);
               }} />
             </label>
             <label>
@@ -205,11 +234,11 @@ export function AddGoalModal({
           </div>}
           <label>
             Due date
-            <input type="date" min={periodStart} max={periodEnd} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            <input type="date" min={periodStart} max={repeatUntilDue ? undefined : periodEnd} value={dueDate} onChange={(event) => changeDueDate(event.target.value)} />
           </label>
           <label>
             Notes <span className="field-optional">optional</span>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={measurement === "pages" ? "Book, paper, or chapter…" : "Why this matters or what success looks like…"} />
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={measurement === "pages" ? "Book, paper, or chapter…" : measurement === "minutes" ? "Audiobook title or listening plan…" : "Why this matters or what success looks like…"} />
           </label>
 
           <label className="schedule-toggle">
@@ -243,4 +272,3 @@ export function AddGoalModal({
     </div>
   );
 }
-

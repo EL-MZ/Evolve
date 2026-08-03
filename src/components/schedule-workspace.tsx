@@ -49,6 +49,9 @@ function newEventForRange(start: Date, end: Date, goal?: Goal, color = "#A8F06A"
     linkUrl: "",
     location: "",
     color,
+    completed: false,
+    completedAt: null,
+    progressContribution: 0,
   };
 }
 
@@ -86,7 +89,7 @@ export function ScheduleWorkspace({
         setThemeKey(workspace.themeKey);
       } catch {
         if (!active) return;
-        setStorageError("Your planning tables are not ready yet. Apply Supabase migration 0004, then reload.");
+        setStorageError("Your planning tables are not ready yet. Apply Supabase migrations through 0005, then reload.");
       } finally {
         if (active) setHydrated(true);
       }
@@ -185,6 +188,9 @@ export function ScheduleWorkspace({
       id: crypto.randomUUID(),
       startsAt: start.toISOString(),
       endsAt: end.toISOString(),
+      completed: false,
+      completedAt: null,
+      progressContribution: 0,
     });
     if (saved) setEditingEvent(saved);
   }
