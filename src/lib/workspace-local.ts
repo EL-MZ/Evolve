@@ -34,6 +34,7 @@ function normalizeGoal(goal: LegacyGoal): Goal | null {
     periodStart,
     periodEnd,
     dueDate: goal.dueDate ?? periodEnd,
+    repeatUntilDue: Boolean(goal.repeatUntilDue),
     completed: Boolean(goal.completed),
   };
 }
@@ -52,6 +53,9 @@ function normalizeEvent(event: Partial<CalendarEvent>): CalendarEvent | null {
     linkUrl: event.linkUrl ?? "",
     location: event.location ?? "",
     color: event.color ?? "#A8F06A",
+    completed: Boolean(event.completed),
+    completedAt: event.completedAt ?? null,
+    progressContribution: Math.max(Number(event.progressContribution ?? 0), 0),
   };
 }
 

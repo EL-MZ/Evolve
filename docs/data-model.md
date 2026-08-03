@@ -16,11 +16,14 @@ The executable migrations are in `supabase/migrations` and must be applied in nu
 
 - `period_type`, `period_start`, and `period_end` define whether a goal is weekly, monthly, or spans a custom range. The legacy `week_start` remains populated for compatibility.
 - A monthly or custom goal appears in every weekly view that overlaps its range; it is one goal, not a copy per week.
+- `repeat_until_due` keeps an explicitly selected weekly goal visible in every overlapping week through `due_date`. It remains one goal with one shared progress value rather than creating weekly copies.
 - `target_value` is positive. `current_value` is the fast current summary, while `progress_entries` retain the history of cumulative values.
 - `log_increment` is the positive amount added by one Log action and is chosen per goal.
 - `scheduled_sessions.goal_id` is optional. Linked goal sessions cascade when their goal is deleted; standalone events remain independent.
 - Calendar notes, web links, locations, colours, and event kind live on the calendar item rather than the goal.
+- `scheduled_sessions.completed` records calendar completion independently from goal completion. `progress_contribution` stores the exact amount a linked completion added so reopening the event can reverse only its own contribution.
 - The `set_goal_progress` function updates the goal summary and its history entry in one transaction.
+- `set_calendar_event_completion` locks the event and linked goal, changes both in one transaction, and is idempotent when asked to apply the existing state.
 - Four starter categories are inserted for each profile, but a new account has no goals.
 - Custom category names, colours, and icon keys are stored as user-owned rows rather than being hard-coded in the interface.
 - A goal's visibility is `private`, `friends`, or `selected`; the default is `private`.

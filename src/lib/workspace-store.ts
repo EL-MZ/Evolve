@@ -33,6 +33,7 @@ type GoalRow = {
   period_start: string;
   period_end: string;
   due_date: string;
+  repeat_until_due: boolean;
   status: string;
 };
 
@@ -48,6 +49,29 @@ type ScheduledSessionRow = {
   link_url: string | null;
   location: string | null;
   color: string;
+  completed: boolean;
+  completed_at: string | null;
+  progress_contribution: number | string;
+};
+
+type EventCompletionRow = {
+  event_id: string;
+  event_completed: boolean;
+  event_completed_at: string | null;
+  event_progress_contribution: number | string;
+  linked_goal_id: string | null;
+  goal_current: number | string | null;
+  goal_completed: boolean | null;
+};
+
+export type EventCompletionResult = {
+  eventId: string;
+  eventCompleted: boolean;
+  eventCompletedAt: string | null;
+  eventProgressContribution: number;
+  goalId: string | null;
+  goalCurrent: number | null;
+  goalCompleted: boolean | null;
 };
 
 function client() {
@@ -68,12 +92,12 @@ export async function loadWorkspace(ownerId: string): Promise<Workspace> {
     api.from("categories").select("id,name,short_label,color,icon_key,is_default").eq("owner_id", ownerId).order("sort_order"),
     api
       .from("goals")
-      .select("id,title,category_id,current_value,target_value,log_increment,measurement,unit,notes,period_type,period_start,period_end,due_date,status")
+      .select("id,title,category_id,current_value,target_value,log_increment,measurement,unit,notes,period_type,period_start,period_end,due_date,repeat_until_due,status")
       .eq("owner_id", ownerId)
       .order("period_start"),
     api
       .from("scheduled_sessions")
-      .select("id,goal_id,event_kind,title,starts_at,ends_at,timezone,notes,link_url,location,color")
+      .select("id,goal_id,event_kind,title,starts_at,ends_at,timezone,notes,link_url,location,color,completed,completed_at,progress_contribution")
       .eq("owner_id", ownerId)
       .order("starts_at"),
   ]);
@@ -104,6 +128,7 @@ export async function loadWorkspace(ownerId: string): Promise<Workspace> {
     periodStart: row.period_start,
     periodEnd: row.period_end,
     dueDate: row.due_date,
+    repeatUntilDue: row.repeat_until_due,
     completed: row.status === "completed",
   }));
   const events: CalendarEvent[] = ((sessionRows ?? []) as ScheduledSessionRow[]).map((row) => ({
@@ -118,6 +143,9 @@ export async function loadWorkspace(ownerId: string): Promise<Workspace> {
     linkUrl: row.link_url ?? "",
     location: row.location ?? "",
     color: row.color,
+    completed: row.completed,
+    completedAt: row.completed_at,
+    progressContribution: Number(row.progress_contribution),
   }));
   return {
     categories,
@@ -158,6 +186,7 @@ export async function createGoal(ownerId: string, goal: Goal, category: Category
     period_start: goal.periodStart,
     period_end: goal.periodEnd,
     due_date: goal.dueDate,
+    repeat_until_due: goal.repeatUntilDue,
     due_day: new Date(`${goal.dueDate}T12:00:00`).toLocaleDateString("en-NZ", { weekday: "long" }),
     status: goal.completed ? "completed" : "active",
   }).select("id").single();
@@ -178,6 +207,9 @@ export async function createCalendarEvent(ownerId: string, event: CalendarEvent)
     link_url: event.linkUrl || null,
     location: event.location || null,
     color: event.color,
+    completed: event.completed,
+    completed_at: event.completedAt,
+    progress_contribution: event.progressContribution,
   }).select("id").single();
   if (error) throw error;
   return { ...event, id: data.id as string };
@@ -206,6 +238,28 @@ export async function deleteCalendarEvent(ownerId: string, eventId: string) {
   if (error) throw error;
 }
 
+export async function setCalendarEventCompletion(
+  _ownerId: string,
+  eventId: string,
+  completed: boolean,
+): Promise<EventCompletionResult> {
+  const { data, error } = await client().rpc("set_calendar_event_completion", {
+    p_event_id: eventId,
+    p_completed: completed,
+  }).single();
+  if (error) throw error;
+  const row = data as EventCompletionRow;
+  return {
+    eventId: row.event_id,
+    eventCompleted: row.event_completed,
+    eventCompletedAt: row.event_completed_at,
+    eventProgressContribution: Number(row.event_progress_contribution),
+    goalId: row.linked_goal_id,
+    goalCurrent: row.goal_current === null ? null : Number(row.goal_current),
+    goalCompleted: row.goal_completed,
+  };
+}
+
 export async function deleteGoal(ownerId: string, goalId: string) {
   const { error } = await client().from("goals").delete().eq("id", goalId).eq("owner_id", ownerId);
   if (error) throw error;
@@ -227,4 +281,3 @@ export async function updateTheme(ownerId: string, themeKey: ThemeKey) {
   }).eq("id", ownerId);
   if (error) throw error;
 }
-

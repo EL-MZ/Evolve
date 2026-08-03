@@ -14,7 +14,7 @@ Open `http://localhost:3000`. Without Supabase variables, the app clearly runs a
 ## Enable real accounts
 
 1. Create a Supabase project.
-2. Run every SQL file in `supabase/migrations` in numeric order. Existing projects should apply the new `0004_planning_periods_and_event_details.sql` migration.
+2. Run every SQL file in `supabase/migrations` in numeric order. Existing projects should apply migrations through `0005_goal_recurrence_and_event_completion.sql`.
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 4. Add the same two variables in Vercel and redeploy.
 5. In Supabase Auth URL configuration, set the production site URL to the Vercel domain and add the local URL as a redirect URL.

@@ -22,7 +22,7 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 
 1. Sign in and arrive at the current week.
 2. Add goals under Work, Sport, Reading, Study, or a custom area.
-3. Choose a measurement such as complete/incomplete, count, duration, distance, pages, or sessions.
+3. Choose a measurement such as complete/incomplete, count, duration, distance, book pages, audiobook minutes, or sessions.
 4. Log progress during the week.
 5. Choose a weekly, monthly, or custom-range period.
 6. Drag the goal into the hourly schedule one or more times, or create a standalone detailed event.
@@ -44,8 +44,12 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 - Users can add a custom category with their own name, colour, and icon.
 - Users can create weekly, monthly, and custom-range goals without duplicating progress.
 - Page-based reading goals clearly show pages completed and remaining.
+- Page-based reading and audiobook-minute goals can be adjusted directly with a progress slider.
+- A weekly goal can remain visible in every week through its selected due date without duplicating its progress.
 - Dropping one goal several times creates independent sessions that survive reload.
 - Standalone events can store notes, a web link, and a location.
+- Today’s calendar events can be completed independently; a linked event applies one configured goal increment exactly once and reverses that contribution when reopened.
+- The weekly plan shows one selected day at a time and can start a quick event for that day.
 - Theme selection changes only the sidebar and main accent and survives reload.
 
 ## Measurement types
@@ -57,6 +61,7 @@ Evolve helps a small group of users turn weekly intentions across work, sport, r
 | Duration | Study for five hours | Add timed or manual entries |
 | Distance | Run 20 km | Add distance entries |
 | Pages | Read 120 pages | Add page counts |
+| Minutes | Listen to a 600-minute audiobook | Drag or add listening minutes |
 | Custom | Two observing blocks | User-defined unit |
 
 ## Out of scope for the first release
